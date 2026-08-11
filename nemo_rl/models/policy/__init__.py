@@ -331,6 +331,15 @@ class MegatronConfig(TypedDict):
     # 1 is the minimum recommendation for RL since we almost always need to offload before beginning generation.
     # Setting to 0 is faster, but you are more likely to run out of GPU memory. In SFT/DPO, the default is 0.
     empty_unused_memory_level: int
+    # Skip the two full gc.collect() passes inside the reference-model weight
+    # swap (use_reference_model), which otherwise run on every step under
+    # empty_unused_memory_level >= 1 and cost ~0.75s each regardless of model
+    # size (full-interpreter GC; scan time scales with Python object count).
+    # torch.cuda.empty_cache() still runs, so cached blocks are still returned
+    # to the driver and peak reserved memory is unchanged. Numerically a no-op.
+    # The only behavior delta: GPU memory held via Python reference *cycles* is
+    # not force-collected at the swap boundary. Absent/False = current behavior.
+    skip_reference_swap_gc: NotRequired[bool]
     activation_checkpointing: bool
     # Recompute granularity: "full" recomputes all activations, "selective" recomputes
     # only specific modules (see recompute_modules). "selective" typically saves ~10-18GB

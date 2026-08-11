@@ -1766,8 +1766,16 @@ class MegatronPolicyWorkerImpl(
                 raise_if_key_missing=True,
             )
 
+            # The full gc.collect() here costs ~0.75s per pass regardless of
+            # model size (interpreter-wide scan) and exists only to force
+            # cycle-held tensors free before empty_cache; the swap sits
+            # strictly inside the policy-owned memory window (the colocated
+            # generation handoff has its own cleanup in the offload path), so
+            # skip_reference_swap_gc can drop it. empty_cache still runs, so
+            # peak reserved memory is unchanged.
             if self.cfg["megatron_cfg"]["empty_unused_memory_level"] >= 1:
-                gc.collect()
+                if not self.cfg["megatron_cfg"].get("skip_reference_swap_gc"):
+                    gc.collect()
                 torch.cuda.empty_cache()
 
             # Temporarily disable top-k/top-p filtering for reference policy logprobs.
@@ -1799,7 +1807,8 @@ class MegatronPolicyWorkerImpl(
             )
 
             if self.cfg["megatron_cfg"]["empty_unused_memory_level"] >= 1:
-                gc.collect()
+                if not self.cfg["megatron_cfg"].get("skip_reference_swap_gc"):
+                    gc.collect()
                 torch.cuda.empty_cache()
 
             ## re-enable overlap param gather after weight swap
